@@ -1,3 +1,26 @@
+// A single-valued filter legitimately arrives as a SCALAR, not a one-element
+// array: floreer_app's product page links a category as
+// `?field_filters={"item_group":"Vegetables"}`, and the server accepts that
+// shape and returns the right items. `restore_filters_state` nevertheless
+// called `.map` on the value, so `"Vegetables".map` threw (framework#230).
+//
+// The throw is why this mattered beyond a missing checkbox. It escaped the
+// `get_product_filter_data` callback, so `add_paging_section` and
+// `disable_view_toggler(false)` -- the statements after it -- never ran: a
+// category listing rendered with NO pagination and a permanently disabled view
+// toggler. Measured on production: 124 tiles, 0 paging controls, against 3 and
+// an enabled toggler on the unfiltered control page.
+//
+// Normalising here, rather than wrapping the call site in try/catch, keeps one
+// consistent value type for every later reader of `this.field_filters`, and
+// fixes hand-typed, bookmarked and externally-linked scalar URLs too -- not
+// just the links floreer_app happens to generate.
+function webshop_filter_values(value) {
+	if (Array.isArray(value)) return value;
+	if (value === undefined || value === null) return [];
+	return [value];
+}
+
 webshop.ProductView =  class {
 	/* Options:
 		- View Type
@@ -464,7 +487,8 @@ webshop.ProductView =  class {
 		if (field_filters) {
 			field_filters = JSON.parse(field_filters);
 			for (let fieldname in field_filters) {
-				const values = field_filters[fieldname];
+				const values = webshop_filter_values(field_filters[fieldname]);
+				field_filters[fieldname] = values;
 				const selector = values.map(value => {
 					return `input[data-filter-name="${fieldname}"][data-filter-value="${value}"]`;
 				}).join(',');
@@ -475,7 +499,8 @@ webshop.ProductView =  class {
 		if (attribute_filters) {
 			attribute_filters = JSON.parse(attribute_filters);
 			for (let attribute in attribute_filters) {
-				const values = attribute_filters[attribute];
+				const values = webshop_filter_values(attribute_filters[attribute]);
+				attribute_filters[attribute] = values;
 				const selector = values.map(value => {
 					return `input[data-attribute-name="${attribute}"][data-attribute-value="${value}"]`;
 				}).join(',');
