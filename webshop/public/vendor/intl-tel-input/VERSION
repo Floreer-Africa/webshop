@@ -1,0 +1,24 @@
+intl-tel-input 29.5.2
+Licence:   MIT (see LICENSE alongside)
+Source:    https://registry.npmjs.org/intl-tel-input/-/intl-tel-input-29.5.2.tgz
+Tarball:   sha256 90dddb8bae7e104690b9553e1720c4399dc5d01c702adcd033812af47a4c21ba
+Retrieved: 2026-09-24
+
+Vendored rather than loaded from a CDN: a storefront should not make a
+third-party request per checkout, and a vendored file cannot change under us.
+
+The WithUtils build is taken deliberately. getNumber() (E.164 output) and
+isValidNumber() both require the utils half, so the 51 KB core build alone
+cannot do what this form needs. The cost is size, which is paid back by loading
+the whole thing LAZILY -- only when a customer actually opens the address form,
+never on page load.
+
+Only the webp sprites are vendored: intlTelInput.min.css references
+../img/flags.webp and ../img/flags@2x.webp and nothing else. The png sprites in
+the package are unreferenced by this stylesheet.
+
+Per-file sha256:
+  122dc6a10109d0ee543ac3f60ef80abc9f07646235761660ab2668cb3d68f7c3  css/intlTelInput.min.css
+  c8b020b385c0e5fb025ce404f4d3ff4e94d002f18fc5c684fc2aaed7ac6ba00f  img/flags@2x.webp
+  ed164ab32687531059bf7fd23cca87b8ad1fe5fa7ab9b0dd974ad362716c086a  img/flags.webp
+  bd69262f23b4a5fd825d2f25f3fd4136b5db67a18acd39b0dea8f2c508cddb8b  js/intlTelInputWithUtils.min.js
