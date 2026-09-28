@@ -5,7 +5,7 @@ PR-Foundry fork addition (checkout address form design, 2026-09-24).
 Registered through ``override_whitelisted_methods`` rather than by editing
 ``shopping_cart/cart.py``. webshop is an upstream fork here, so every line changed in a file
 upstream owns is a line a sync can reset and a re-verify grep has to watch. The override
-mechanism is the same one ``courier_guy_za`` uses to withdraw its shipping rule, and it keeps
+mechanism is the same one ``za_courier_guy`` uses to withdraw its shipping rule, and it keeps
 the patch surface in upstream-owned files at zero.
 
 Deliberately a top-level module and not ``webshop/webshop/api/…``: upstream ships
