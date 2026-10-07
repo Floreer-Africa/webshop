@@ -23,6 +23,8 @@ add_to_apps_screen = [
 		"name": "webshop",
 		"title": app_title,
 		"route": "/desk/webshop",
+		# framework#247: without a gate a Website User's login lands on /desk.
+		"has_permission": "webshop.check_app_permission",
 	}
 ]
 app_publisher = "Frappe Technologies Pvt. Ltd."
