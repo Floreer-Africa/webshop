@@ -364,7 +364,24 @@ webshop.checkout_address = {
 			// on the host is what reaches inside the shadow root; a background on the host
 			// alone does not.
 			el.style.colorScheme = "light";
-			host.appendChild(el);
+
+			// A bare box with only a magnifier above a column of address fields reads as
+			// one more field to fill in, not as a shortcut that fills the others. Added
+			// here, once the element exists, so the "unavailable" path never shows a label
+			// for a box that is not there. A div rather than <label for>: the input lives
+			// in the element's shadow root, which a light-DOM `for` cannot reach, so the
+			// accessible name goes on the host instead.
+			const caption = __("Find your address");
+			const label = document.createElement("div");
+			label.className = "control-label";
+			label.textContent = caption;
+			const hint = document.createElement("div");
+			hint.className = "help-box small text-muted mt-1";
+			hint.textContent = __(
+				"Start typing your street address and pick it from the list — we'll fill in the fields below. Or skip this and type them yourself.",
+			);
+			el.setAttribute("aria-label", caption);
+			host.append(label, el, hint);
 
 			// Both names are bound deliberately: the event was gmp-placeselect while the
 			// element was in beta and gmp-select at GA. Binding one and guessing wrong is a
