@@ -138,9 +138,6 @@ webshop.checkout_address = {
 						<label class="control-label reqd" for="wsa-phone-input">${__("Mobile number")}</label>
 						<input type="tel" id="wsa-phone-input" class="form-control wsa-phone-input"
 							autocomplete="tel">
-						<div class="small text-muted mt-1">${__(
-							"Used for delivery notifications, including a locker collection PIN.",
-						)}</div>
 						<div class="small text-danger mt-1 wsa-phone-error" hidden></div>
 					</div>`,
 			},
