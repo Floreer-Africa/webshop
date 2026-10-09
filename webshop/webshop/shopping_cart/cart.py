@@ -796,6 +796,12 @@ def apply_coupon_code(applied_code, applied_referral_sales_partner):
 	quotation.coupon_code = coupon_name
 	quotation.flags.ignore_permissions = True
 	with system_permissions():
+		# save() alone does not apply the coupon: on validate, a line that already carries
+		# pricing_rules only re-checks the rules it has (get_pricing_rule_for_item with
+		# for_validate), so the rule this coupon unlocks is never found. The Sales Order
+		# mapper's set_missing_values() does search, so the cart showed one price and the
+		# order charged another. Price the cart with that same call (framework#265).
+		quotation.set_missing_values()
 		quotation.save()
 
 	if applied_referral_sales_partner:
