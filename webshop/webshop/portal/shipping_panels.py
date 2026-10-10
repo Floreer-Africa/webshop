@@ -12,7 +12,7 @@ it is three incompatible forks of the same file.
 **The contract.** An app registers a dotted path and returns structured data:
 
     # any shipping app's hooks.py
-    webshop_shipping_panels = ["courier_guy_za.portal.collection.panel"]
+    webshop_shipping_panels = ["za_courier_guy.portal.collection.panel"]
 
     def panel(doctype: str, name: str) -> dict | None:
         '''None when this app has nothing to say about this document.'''
