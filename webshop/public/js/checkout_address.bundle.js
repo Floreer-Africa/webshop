@@ -138,9 +138,6 @@ webshop.checkout_address = {
 						<label class="control-label reqd" for="wsa-phone-input">${__("Mobile number")}</label>
 						<input type="tel" id="wsa-phone-input" class="form-control wsa-phone-input"
 							autocomplete="tel">
-						<div class="small text-muted mt-1">${__(
-							"Used for delivery notifications, including a locker collection PIN.",
-						)}</div>
 						<div class="small text-danger mt-1 wsa-phone-error" hidden></div>
 					</div>`,
 			},
@@ -165,7 +162,66 @@ webshop.checkout_address = {
 
 	async open($btn) {
 		const addressType = webshop.checkout_address.typeFor($btn);
+		await webshop.checkout_address.showDialog(addressType, null);
+	},
 
+	// -- editing (framework#253) ---------------------------------------------------------
+	//
+	// The cart's address cards link Edit to /address/<name>, erpnext's stock Web Form, which
+	// has no phone widget, no address search and no E.164 check. Rather than patch the two
+	// upstream card templates, a delegated handler intercepts those links and opens this
+	// form pre-filled -- the same zero-line seam as the add button. Delegated on document,
+	// so webshop's in-place re-render of the cards cannot unbind it.
+
+	EDIT_LINK: '.address-card a.card-link[href^="/address/"]',
+
+	nameFromEditLink(href) {
+		const path = new URL(href, window.location.origin).pathname;
+		return decodeURIComponent(path.replace(/^\/address\//, "").replace(/\/$/, ""));
+	},
+
+	bindEdit() {
+		$(document)
+			.off("click.wsaEdit")
+			.on("click.wsaEdit", webshop.checkout_address.EDIT_LINK, (e) => {
+				const name = webshop.checkout_address.nameFromEditLink(e.currentTarget.href);
+				if (!name) return;
+				e.preventDefault();
+				webshop.checkout_address.openEdit(name, $(e.currentTarget));
+			});
+	},
+
+	async openEdit(name, $link) {
+		let values;
+		try {
+			const r = await frappe.call("webshop.webshop.checkout_address.get_address", { name });
+			values = r && r.message;
+		} catch (e) {
+			values = null;
+		}
+		// If the address cannot be loaded here, the stock page is still a way to edit it --
+		// better than a dead link.
+		if (!values) {
+			window.location.href = $link.attr("href");
+			return;
+		}
+		// The section a page card sits in is where the cart uses it. The Change picker's
+		// cards carry data-section too (cart_address.html builds them that way) but list
+		// every address, so an edit from inside that dialog must not re-point the cart.
+		const inPicker = $link.closest(".modal").length > 0;
+		const section = inPicker ? "" : $link.closest("[data-section]").attr("data-section") || "";
+		const inUseAs = section.indexOf("billing") !== -1
+			? "Billing"
+			: section.indexOf("shipping") !== -1
+				? "Shipping"
+				: null;
+		await webshop.checkout_address.showDialog(values.address_type || "Shipping", {
+			values,
+			inUseAs,
+		});
+	},
+
+	async showDialog(addressType, edit) {
 		// The vendor load is awaited but never allowed to stop the form opening: a phone
 		// field without the flag widget is still a usable phone field, and a checkout that
 		// cannot proceed because an asset failed is worse than a plainer input.
@@ -181,13 +237,31 @@ webshop.checkout_address = {
 			title: __("Delivery Address"),
 			fields: webshop.checkout_address.fields(addressType),
 			primary_action_label: __("Save address"),
-			primary_action: (values) => webshop.checkout_address.submit(d, values),
+			primary_action: (values) =>
+				edit
+					? webshop.checkout_address.submitEdit(d, values, edit)
+					: webshop.checkout_address.submit(d, values),
 		});
+
+		if (edit) {
+			const v = edit.values;
+			d.set_values({
+				address_title: v.address_title,
+				address_line1: v.address_line1,
+				address_line2: v.address_line2,
+				city: v.city,
+				state: v.state,
+				pincode: v.pincode,
+				country: v.country,
+				email_id: v.email_id,
+				address_type: v.address_type,
+			});
+		}
 
 		d.show();
 		webshop.checkout_address._dialog = d;
 		webshop.checkout_address._vendorOk = vendorOk;
-		webshop.checkout_address.attachPhone(d, vendorOk);
+		webshop.checkout_address.attachPhone(d, vendorOk, edit ? edit.values.phone : null);
 		webshop.checkout_address.attachLookup(d);
 		$(document).trigger("webshop:address-form-shown", [d, { vendorOk, addressType }]);
 	},
@@ -287,7 +361,24 @@ webshop.checkout_address = {
 			// on the host is what reaches inside the shadow root; a background on the host
 			// alone does not.
 			el.style.colorScheme = "light";
-			host.appendChild(el);
+
+			// A bare box with only a magnifier above a column of address fields reads as
+			// one more field to fill in, not as a shortcut that fills the others. Added
+			// here, once the element exists, so the "unavailable" path never shows a label
+			// for a box that is not there. A div rather than <label for>: the input lives
+			// in the element's shadow root, which a light-DOM `for` cannot reach, so the
+			// accessible name goes on the host instead.
+			const caption = __("Find your address");
+			const label = document.createElement("div");
+			label.className = "control-label";
+			label.textContent = caption;
+			const hint = document.createElement("div");
+			hint.className = "help-box small text-muted mt-1";
+			hint.textContent = __(
+				"Start typing your street address and pick it from the list — we'll fill in the fields below. Or skip this and type them yourself.",
+			);
+			el.setAttribute("aria-label", caption);
+			host.append(label, el, hint);
 
 			// Both names are bound deliberately: the event was gmp-placeselect while the
 			// element was in beta and gmp-select at GA. Binding one and guessing wrong is a
@@ -367,11 +458,14 @@ webshop.checkout_address = {
 
 	// -- phone ---------------------------------------------------------------------------
 
-	attachPhone(d, vendorOk) {
+	attachPhone(d, vendorOk, initial) {
 		webshop.checkout_address._iti = null;
 		webshop.checkout_address._geo = null;
 		const input = d.$wrapper.find(".wsa-phone-input")[0];
 		if (!input) return;
+		// The stored number goes in as-is; with the widget it is re-parsed below, so a
+		// non-E.164 value left by the stock form shows up as invalid rather than vanishing.
+		if (initial) input.value = initial;
 
 		// No widget is a degraded form, not a broken one: the input stays a plain tel
 		// field, whatever is typed goes to the server, and the server refuses anything
@@ -459,6 +553,42 @@ webshop.checkout_address = {
 			})
 			.catch(() => d.get_primary_btn().prop("disabled", false));
 	},
+
+	submitEdit(d, values, edit) {
+		const phone = webshop.checkout_address.phoneValue(d);
+		if (phone.error) return;
+		values.phone = phone.number;
+
+		// Only a NEW pick replaces stored coordinates; an edit that never touched the search
+		// keeps the ones the address already had.
+		const geo = webshop.checkout_address._geo;
+		if (geo) {
+			values.custom_latitude = geo.latitude;
+			values.custom_longitude = geo.longitude;
+			values.custom_place_id = geo.place_id;
+		}
+
+		const name = edit.values.name;
+		d.get_primary_btn().prop("disabled", true);
+		frappe
+			.call("webshop.webshop.checkout_address.update_address", { name, doc: values })
+			.then(() =>
+				// The quotation holds a rendered copy of the address and its shipping rule
+				// was chosen against the old one; re-selecting refreshes both. Only where the
+				// cart actually uses it -- see openEdit.
+				edit.inUseAs
+					? frappe.call({
+							method: "webshop.webshop.shopping_cart.cart.update_cart_address",
+							args: { address_type: edit.inUseAs, address_name: name },
+						})
+					: null,
+			)
+			.then(() => {
+				d.hide();
+				window.location.reload();
+			})
+			.catch(() => d.get_primary_btn().prop("disabled", false));
+	},
 };
 
 frappe.ready(() => {
@@ -466,6 +596,7 @@ frappe.ready(() => {
 	// setTimeout(0) so this runs after upstream's own frappe.ready handler has bound its
 	// click. Registration order between apps is not something we control.
 	setTimeout(() => webshop.checkout_address.takeOver(), 0);
+	webshop.checkout_address.bindEdit();
 
 	// And again whenever the cart re-renders. webshop replaces the address markup in place
 	// after a quantity or address change, which destroys the element our click is bound to

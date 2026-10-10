@@ -208,10 +208,13 @@ def pay_for_document(dt: str, dn: str):
 			frappe.ValidationError,
 		)
 
-	# Elevate ONLY after the ownership gate above passed.
-	original_user = frappe.session.user
-	try:
-		frappe.set_user("Administrator")
+	# Elevate ONLY after the ownership gate above passed -- and through system_permissions,
+	# never frappe.set_user: set_user also sets session.sid to the user NAME, so restoring
+	# the user afterwards left the customer's cookie holding their email address, and the
+	# next page logged them out (framework#255).
+	from webshop.webshop.shopping_cart.cart import system_permissions
+
+	with system_permissions():
 		return make_payment_request(
 			dt=dt,
 			dn=dn,
@@ -221,5 +224,3 @@ def pay_for_document(dt: str, dn: str):
 			party=party,
 			recipient_id=payer_email,
 		)
-	finally:
-		frappe.set_user(original_user)
