@@ -33,7 +33,51 @@ HOOK = "webshop_shipping_panels"
 
 # What a contributor may put on a customer's page. Anything else it returns is dropped
 # rather than passed through -- an `html` key would be a renderer's standing temptation.
-_ALLOWED_KEYS = ("title", "status", "rows", "note")
+# `timelines` (framework#268) is sanitised field by field in `_clean_timeline`.
+_ALLOWED_KEYS = ("title", "status", "rows", "note", "timelines")
+_MAX_TIMELINES, _MAX_STEPS, _MAX_EVENTS, _MAX_TEXT = 10, 8, 50, 200
+
+
+def _text(value) -> str:
+	return str(value if value is not None else "")[:_MAX_TEXT]
+
+
+def _clean_timeline(t) -> dict | None:
+	"""Reduce one contributed timeline to plain, capped data; None for non-dicts."""
+	if not isinstance(t, dict):
+		return None
+	raw_steps = t.get("steps")
+	steps = (
+		[_text(s) for s in raw_steps if not isinstance(s, (dict, list))][:_MAX_STEPS]
+		if isinstance(raw_steps, list)
+		else []
+	)
+	try:
+		reached = int(t.get("reached") or 0)
+	except TypeError, ValueError, OverflowError:
+		reached = 0
+	reached = max(0, min(reached, len(steps) - 1)) if steps else 0
+	events = t.get("events") if isinstance(t.get("events"), list) else []
+	out = {
+		"title": _text(t.get("title")),
+		"steps": steps,
+		"reached": reached,
+		"stopped": bool(t.get("stopped")),
+		"events": [
+			{
+				"time": _text(e.get("time")),
+				"label": _text(e.get("label")),
+				"location": _text(e.get("location")),
+			}
+			for e in events[:_MAX_EVENTS]
+			if isinstance(e, dict)
+		],
+	}
+	# framework#268: one optional plain estimate line.
+	estimate = t.get("estimate")
+	if isinstance(estimate, str) and estimate.strip():
+		out["estimate"] = _text(estimate)
+	return out
 
 
 def _clean(panel: dict) -> dict | None:
@@ -49,6 +93,13 @@ def _clean(panel: dict) -> dict | None:
 		for r in rows
 		if isinstance(r, dict)
 	]
+	if "timelines" in out:
+		raw = out["timelines"] if isinstance(out["timelines"], list) else []
+		cleaned = [c for c in (_clean_timeline(t) for t in raw[:_MAX_TIMELINES]) if c]
+		if cleaned:
+			out["timelines"] = cleaned
+		else:
+			del out["timelines"]
 	return out
 
 
