@@ -16,6 +16,7 @@ expects (create the Lead, or annotate the existing one) on the v16 field.
 """
 
 import frappe
+from frappe.rate_limiter import rate_limit
 from frappe.utils import escape_html
 
 _SOURCE = "Product Inquiry"
@@ -28,7 +29,13 @@ def _ensure_source() -> str:
 	return _SOURCE
 
 
+# Open to anyone and it writes (a Lead, a comment), so it is throttled per IP like the
+# app's other guest writes. A visitor sends one inquiry at a time.
+INQUIRY_RATE = {"limit": 5, "seconds": 60}
+
+
 @frappe.whitelist(allow_guest=True)
+@rate_limit(**INQUIRY_RATE)
 def create_lead_for_item_inquiry(lead, subject, message):
 	"""Record a product inquiry against a Lead. Returns only ``True``.
 
