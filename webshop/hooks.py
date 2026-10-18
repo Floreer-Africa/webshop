@@ -108,6 +108,8 @@ has_website_permission = {
 # client_app.tests.test_checkout_address_phone.
 override_whitelisted_methods = {
 	"webshop.webshop.shopping_cart.cart.add_new_address": "webshop.webshop.checkout_address.add_new_address",
+	# framework#277 -- upstream returned the whole existing Lead to a guest.
+	"webshop.webshop.shopping_cart.cart.create_lead_for_item_inquiry": "webshop.webshop.item_inquiry.create_lead_for_item_inquiry",
 }
 
 

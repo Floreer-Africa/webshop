@@ -55,12 +55,20 @@ def add_new_address(doc):
 
 	Validation happens **before** delegating, so a refused number leaves nothing behind for
 	the customer to trip over on their next visit.
+
+	Only ``EDITABLE_FIELDS`` reach the native save (framework#278). It builds the Address
+	from the caller's dict and saves with ``ignore_permissions``, so anything else sent was
+	written too: ``links`` attached the address to any Customer, ``is_your_company_address``
+	made it a company address, and an existing ``name`` aimed the save at someone else's
+	row. Linking is left to ``Address.link_address()``, which links a new address to the
+	owner's own Contact -- how a cart address has always been linked.
 	"""
 	from webshop.webshop.shopping_cart.cart import add_new_address as _native
 
 	doc = frappe.parse_json(doc)
 	_validate_phone(doc)
-	return _native(doc)
+	meta = frappe.get_meta("Address")
+	return _native({f: doc[f] for f in EDITABLE_FIELDS if f in doc and meta.has_field(f)})
 
 
 # What the checkout form shows, and so everything an edit may touch. ``links`` is absent on
