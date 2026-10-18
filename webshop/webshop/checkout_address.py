@@ -148,3 +148,20 @@ def update_address(name, doc):
 	# same reason the native add_new_address saves with this flag.
 	address.save(ignore_permissions=True)
 	return {"name": address.name, "address_type": address.address_type}
+
+
+@frappe.whitelist()
+def update_cart_address(address_type: str, address_name: str) -> dict:
+	"""Set the cart's billing or shipping address, but only to one of the caller's own.
+
+	Replaces ``cart.update_cart_address`` through ``override_whitelisted_methods``
+	(framework#286). The native function loads whatever Address name it is sent before
+	anything checks it. ERPNext's Quotation validation then refuses a foreign one, but by
+	then the answer already differs between a missing name (DoesNotExistError) and someone
+	else's (ValidationError), which tells a caller which addresses exist. Here both get the
+	same PermissionError, before any read.
+	"""
+	from webshop.webshop.shopping_cart.cart import update_cart_address as native
+
+	_owned_address(address_name)
+	return native(address_type, address_name)

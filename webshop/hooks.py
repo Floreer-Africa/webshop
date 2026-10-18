@@ -110,6 +110,11 @@ override_whitelisted_methods = {
 	"webshop.webshop.shopping_cart.cart.add_new_address": "webshop.webshop.checkout_address.add_new_address",
 	# framework#277 -- upstream returned the whole existing Lead to a guest.
 	"webshop.webshop.shopping_cart.cart.create_lead_for_item_inquiry": "webshop.webshop.item_inquiry.create_lead_for_item_inquiry",
+	# framework#286 -- upstream loaded any Address name the caller sent.
+	"webshop.webshop.shopping_cart.cart.update_cart_address": "webshop.webshop.checkout_address.update_cart_address",
+	# framework#284 -- guest coupon endpoints, throttled per IP.
+	"webshop.webshop.shopping_cart.cart.apply_coupon_code": "webshop.webshop.cart_guards.apply_coupon_code",
+	"webshop.webshop.shopping_cart.cart.remove_coupon_code": "webshop.webshop.cart_guards.remove_coupon_code",
 }
 
 
