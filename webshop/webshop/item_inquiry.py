@@ -36,7 +36,7 @@ INQUIRY_RATE = {"limit": 5, "seconds": 60}
 
 @frappe.whitelist(allow_guest=True)
 @rate_limit(**INQUIRY_RATE)
-def create_lead_for_item_inquiry(lead, subject, message):
+def create_lead_for_item_inquiry(lead: str | dict, subject: str, message: str) -> bool:
 	"""Record a product inquiry against a Lead. Returns only ``True``.
 
 	The form reads the reply as truthy and nothing else, so nothing about any Lead is
