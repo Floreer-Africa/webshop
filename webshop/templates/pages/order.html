@@ -398,9 +398,12 @@
 
 	{% if doc.doctype == "Sales Invoice" and doc.outstanding_amount > 0 and doc.docstatus == 1 %}
 		{# Floreer fork patch (floreer_app#107): route to the /portal/pay method-picker
-		   (PayFast / EFT / pay-on-collection) instead of going straight to PayFast. #}
+		   (PayFast / EFT / pay-on-collection) instead of going straight to PayFast.
+		   floreer_app#348: the link is SIGNED (pay_page_url, a floreer_app jinja
+		   method); /portal/pay refuses an unsigned invoice number. This page only
+		   renders for the invoice's owner, so handing them the signature is safe. #}
 		<div class="mt-4 text-center">
-			<a class="btn" href="/portal/pay?invoice={{ doc.name }}"
+			<a class="btn" href="{{ pay_page_url(doc.name) }}"
 				style="background:#6b6d35;color:#fff;font-weight:600;padding:14px 40px;border-radius:6px;font-size:1rem;text-decoration:none;display:inline-block;min-width:200px;">
 				{{ _("Pay Now") }} &mdash; {{ doc.get_formatted("outstanding_amount") }}
 			</a>
