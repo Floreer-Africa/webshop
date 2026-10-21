@@ -27,9 +27,13 @@ per-tier wrappers (``client_app.api.portal.pay_invoice`` here,
 app, which is precisely why the shared template diverged and why a sibling could not resolve the
 function the template named.
 
-Known, unclosed: framework#109 -- this endpoint is state-changing but reachable via GET, mirroring
-the native ``make_payment_request`` GET pattern.
+PR-Foundry/framework#109 (fork marker): the endpoint creates and submits a Payment Request, so it
+acts only on a POST, which frappe refuses without the session's CSRF token. The order page submits
+a form carrying that token. A GET (a bookmark, an old email, the browser's back button) creates
+nothing: it is redirected to the document's portal page, where the customer presses Pay.
 """
+
+from urllib.parse import quote
 
 import frappe
 from erpnext.accounts.doctype.payment_request.payment_request import (
@@ -144,9 +148,41 @@ def _payer_email(doc, session_user: str) -> str | None:
 	return None
 
 
-@frappe.whitelist()  # login required (NOT allow_guest); Guest is also rejected explicitly below
+def document_page_url(dt: str, dn: str) -> str:
+	"""The portal page that shows ``dn`` (``/orders/<name>``, ``/invoices/<name>``, ...).
+
+	Read off the ``website_route_rules`` that route to the ``order`` page, so it cannot drift
+	from the routes the site actually serves. ``/me`` when no rule names the doctype.
+	"""
+	for rule in frappe.get_hooks("website_route_rules"):
+		if rule.get("to_route") != "order" or (rule.get("defaults") or {}).get("doctype") != dt:
+			continue
+		prefix = rule.get("from_route", "").split("/<", 1)[0]
+		if prefix:
+			return f"{prefix}/{quote(str(dn), safe='')}"
+	return "/me"
+
+
+def _is_http_get() -> bool:
+	"""True only inside an HTTP request that is not a POST.
+
+	In-process callers (tests, ``bench execute``) have no request and are server code, so they
+	are not redirected. The whitelist below admits GET and POST only.
+	"""
+	request = getattr(frappe.local, "request", None)
+	return request is not None and request.method != "POST"
+
+
+# PR-Foundry/framework#109: GET is admitted only so that a link already in the wild lands
+# somewhere useful instead of on frappe's bare 405. It never creates anything.
+@frappe.whitelist(methods=["GET", "POST"])  # login required (NOT allow_guest); Guest refused below
 def pay_for_document(dt: str, dn: str):
 	"""Create (and redirect to) a gateway Payment Request for the caller's own document.
+
+	POST only does that. frappe validates the CSRF token on every POST from a logged-in
+	session, so a page on another site cannot make the customer's browser raise a Payment
+	Request. A GET is redirected to the document's portal page and changes nothing
+	(framework#109).
 
 	Args:
 	        dt: reference doctype (must be payable per ``ALLOWED_DOCTYPES_FOR_PAYMENT_REQUEST``).
@@ -160,6 +196,13 @@ def pay_for_document(dt: str, dn: str):
 	        frappe.PermissionError: caller is Guest, or does not own ``dn``.
 	        frappe.ValidationError: ``dt`` is not payable, or nothing is owed.
 	"""
+	if _is_http_get():
+		# No lookup at all: the redirect is the same for any name, so it reveals nothing, and
+		# the order page does its own permission check (a Guest is sent to log in there).
+		frappe.local.response["type"] = "redirect"
+		frappe.local.response["location"] = document_page_url(dt, dn)
+		return None
+
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Please log in to pay."), frappe.PermissionError)
 

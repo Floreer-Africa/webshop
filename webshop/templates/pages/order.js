@@ -58,9 +58,16 @@ frappe.ready(() => {
 				"/api/method/erpnext.accounts.doctype.payment_request.payment_request.make_payment_request";
 			const href = href_base_url + "?" + args_str;
 
+			// PR-Foundry/framework#109: Pay is a form POST now, so the loyalty path re-points the
+			// form (it still posts dt/dn/csrf_token). The target stays erpnext's native endpoint,
+			// as before; it carries the loyalty_points that pay_for_document does not take.
 			var payment_button = document.getElementById("pay-for-order");
 			payment_button.innerHTML = __("Pay Remaining");
-			payment_button.href = href;
+			if (payment_button.form) {
+				payment_button.form.action = href;
+			} else {
+				payment_button.href = href;
+			}
 		};
 
 		frappe.call({
