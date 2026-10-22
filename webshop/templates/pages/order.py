@@ -63,9 +63,17 @@ def get_context(context):
 				get_loyalty_program_details_with_points,
 			)
 
-			loyalty_program_details = get_loyalty_program_details_with_points(
-				context.doc.customer, customer_loyalty_program
-			)
+			from webshop.webshop.shopping_cart.cart import system_permissions
+
+			# PR-Foundry/framework#308: erpnext #58787/#59100 made this whitelisted function
+			# require Customer read, which a portal customer never holds, so every order page of
+			# a customer with a loyalty program rendered "Not Permitted" (and lost its Pay
+			# button). has_website_permission above has already established that this document
+			# is the caller's own, so the read of its own customer's points runs elevated.
+			with system_permissions():
+				loyalty_program_details = get_loyalty_program_details_with_points(
+					context.doc.customer, customer_loyalty_program
+				)
 			context.available_loyalty_points = int(loyalty_program_details.get("loyalty_points"))
 
 	# show Make Purchase Invoice button based on permission
