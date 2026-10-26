@@ -35,6 +35,13 @@ def get_context(context):
 	# so the button is offered exactly when a non-zero Payment Request would be raised.
 	context.show_pay_button = bool(context.enabled_checkout) and is_payable(context.doc)
 
+	# PR-Foundry/framework#109 (fork marker). Pay is a form POST, and frappe refuses a POST from
+	# a logged-in session without this token. Read from the session here (creating it if the
+	# session has none yet) rather than relying on the page's <!-- csrf_token --> script, so the
+	# form works with JavaScript off. The page is no_cache, so the token is this session's.
+	if context.show_pay_button:
+		context.pay_csrf_token = frappe.sessions.get_csrf_token()
+
 	default_print_format = frappe.db.get_value(
 		"Property Setter",
 		dict(property="default_print_format", doc_type=frappe.form_dict.doctype),
@@ -56,9 +63,17 @@ def get_context(context):
 				get_loyalty_program_details_with_points,
 			)
 
-			loyalty_program_details = get_loyalty_program_details_with_points(
-				context.doc.customer, customer_loyalty_program
-			)
+			from webshop.webshop.shopping_cart.cart import system_permissions
+
+			# PR-Foundry/framework#308: erpnext #58787/#59100 made this whitelisted function
+			# require Customer read, which a portal customer never holds, so every order page of
+			# a customer with a loyalty program rendered "Not Permitted" (and lost its Pay
+			# button). has_website_permission above has already established that this document
+			# is the caller's own, so the read of its own customer's points runs elevated.
+			with system_permissions():
+				loyalty_program_details = get_loyalty_program_details_with_points(
+					context.doc.customer, customer_loyalty_program
+				)
 			context.available_loyalty_points = int(loyalty_program_details.get("loyalty_points"))
 
 	# show Make Purchase Invoice button based on permission

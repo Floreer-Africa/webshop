@@ -55,12 +55,20 @@ def add_new_address(doc):
 
 	Validation happens **before** delegating, so a refused number leaves nothing behind for
 	the customer to trip over on their next visit.
+
+	Only ``EDITABLE_FIELDS`` reach the native save (framework#278). It builds the Address
+	from the caller's dict and saves with ``ignore_permissions``, so anything else sent was
+	written too: ``links`` attached the address to any Customer, ``is_your_company_address``
+	made it a company address, and an existing ``name`` aimed the save at someone else's
+	row. Linking is left to ``Address.link_address()``, which links a new address to the
+	owner's own Contact -- how a cart address has always been linked.
 	"""
 	from webshop.webshop.shopping_cart.cart import add_new_address as _native
 
 	doc = frappe.parse_json(doc)
 	_validate_phone(doc)
-	return _native(doc)
+	meta = frappe.get_meta("Address")
+	return _native({f: doc[f] for f in EDITABLE_FIELDS if f in doc and meta.has_field(f)})
 
 
 # What the checkout form shows, and so everything an edit may touch. ``links`` is absent on
@@ -140,3 +148,20 @@ def update_address(name, doc):
 	# same reason the native add_new_address saves with this flag.
 	address.save(ignore_permissions=True)
 	return {"name": address.name, "address_type": address.address_type}
+
+
+@frappe.whitelist()
+def update_cart_address(address_type: str, address_name: str) -> dict:
+	"""Set the cart's billing or shipping address, but only to one of the caller's own.
+
+	Replaces ``cart.update_cart_address`` through ``override_whitelisted_methods``
+	(framework#286). The native function loads whatever Address name it is sent before
+	anything checks it. ERPNext's Quotation validation then refuses a foreign one, but by
+	then the answer already differs between a missing name (DoesNotExistError) and someone
+	else's (ValidationError), which tells a caller which addresses exist. Here both get the
+	same PermissionError, before any read.
+	"""
+	from webshop.webshop.shopping_cart.cart import update_cart_address as native
+
+	_owned_address(address_name)
+	return native(address_type, address_name)
