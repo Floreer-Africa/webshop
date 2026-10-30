@@ -608,6 +608,25 @@ def _listing_memo():
 	return getattr(frappe.local, "webshop_listing_memo", None)
 
 
+@contextmanager
+def listing_memo():
+	"""Open the per-request listing memo for the duration of the block.
+
+	Re-entrant: inside an open memo this reuses it and leaves it open, so a caller
+	that wraps a per-item loop (Floreer's listing engine calls add_display_details
+	once per item) keeps one memo for the whole page. Only the call that opened the
+	memo closes it.
+	"""
+	if _listing_memo() is not None:
+		yield
+		return
+	frappe.local.webshop_listing_memo = {}
+	try:
+		yield
+	finally:
+		frappe.local.webshop_listing_memo = None
+
+
 def get_party(user=None):
 	if not user:
 		user = frappe.session.user
