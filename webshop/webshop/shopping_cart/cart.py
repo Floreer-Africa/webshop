@@ -528,8 +528,6 @@ def set_price_list_and_rate(quotation, cart_settings):
 
 def _set_price_list(cart_settings, quotation=None):
 	"""Set price list based on customer or shopping cart default"""
-	from erpnext.accounts.party import get_default_price_list
-
 	# get_party() returns None for a Guest (or any Portal User without a linked
 	# Customer), so guard it — the product page must render for guests. A missing
 	# party simply falls back to the shopping-cart default price list below.
@@ -539,6 +537,25 @@ def _set_price_list(cart_settings, quotation=None):
 	else:
 		party = get_party()
 		party_name = party.get("name") if party else None
+
+	memo = None if quotation else _listing_memo()
+	if memo is not None:
+		key = ("price_list", party_name, cart_settings.price_list)
+		if key not in memo:
+			memo[key] = _resolve_price_list(party_name, cart_settings)
+		selling_price_list = memo[key]
+	else:
+		selling_price_list = _resolve_price_list(party_name, cart_settings)
+
+	if quotation:
+		quotation.selling_price_list = selling_price_list
+
+	return selling_price_list
+
+
+def _resolve_price_list(party_name, cart_settings):
+	from erpnext.accounts.party import get_default_price_list
+
 	selling_price_list = None
 
 	# check if default customer price list exists
@@ -548,9 +565,6 @@ def _set_price_list(cart_settings, quotation=None):
 	# check default price list in shopping cart
 	if not selling_price_list:
 		selling_price_list = cart_settings.price_list
-
-	if quotation:
-		quotation.selling_price_list = selling_price_list
 
 	return selling_price_list
 
@@ -583,10 +597,31 @@ def set_taxes(quotation, cart_settings):
 	tax_service.append_taxes_from_item_tax_template()
 
 
+def _listing_memo():
+	"""The per-request memo add_display_details opens for one product listing, or None.
+
+	Floreer vendored-fork patch (Floreer-Africa/floreer_app#371): a listing page
+	resolved the visitor's party and price list once per item — 200 get_party calls
+	and ~5,900 queries for 100 items. frappe.local is per request, so the memo can
+	never cross users or requests, and outside a listing it does not exist.
+	"""
+	return getattr(frappe.local, "webshop_listing_memo", None)
+
+
 def get_party(user=None):
 	if not user:
 		user = frappe.session.user
 
+	memo = _listing_memo()
+	if memo is not None:
+		key = ("party", user)
+		if key not in memo:
+			memo[key] = _get_party(user)
+		return memo[key]
+	return _get_party(user)
+
+
+def _get_party(user):
 	contact_name = get_contact_name(user)
 	party = None
 

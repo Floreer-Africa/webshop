@@ -222,6 +222,16 @@ class ProductQuery:
 
 	def add_display_details(self, result, discount_list, cart_items):
 		"""Add price and availability details in result."""
+		# Resolve the visitor's party and price list once for the page, not per item
+		# (Floreer vendored-fork patch, Floreer-Africa/floreer_app#371). Scoped to
+		# this call and always removed, so no other code ever sees a memoised party.
+		frappe.local.webshop_listing_memo = {}
+		try:
+			return self._add_display_details(result, discount_list, cart_items)
+		finally:
+			frappe.local.webshop_listing_memo = None
+
+	def _add_display_details(self, result, discount_list, cart_items):
 		for item in result:
 			product_info = get_product_info_for_website(item.item_code, skip_quotation_creation=True).get(
 				"product_info"
