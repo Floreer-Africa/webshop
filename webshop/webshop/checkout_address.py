@@ -156,7 +156,7 @@ def update_address(name, doc):
 
 
 @frappe.whitelist()
-def update_cart_address(address_type: str, address_name: str) -> dict:
+def update_cart_address(address_type: str | None = None, address_name: str | None = None) -> dict:
 	"""Set the cart's billing or shipping address, but only to one of the caller's own.
 
 	Replaces ``cart.update_cart_address`` through ``override_whitelisted_methods``
@@ -168,5 +168,10 @@ def update_cart_address(address_type: str, address_name: str) -> dict:
 	"""
 	from webshop.webshop.shopping_cart.cart import update_cart_address as native
 
+	# A picker with no card chosen posts neither argument. That is the shopper's choice
+	# missing, not a probe, so it gets a message rather than a TypeError and a bare 500
+	# (PR-Foundry/framework#357).
+	if not address_type or not address_name:
+		frappe.throw(_("Please choose an address first."))
 	_owned_address(address_name)
 	return native(address_type, address_name)
