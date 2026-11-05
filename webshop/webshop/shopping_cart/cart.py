@@ -502,6 +502,9 @@ def apply_cart_settings(party=None, quotation=None):
 	quotation.transaction_date = nowdate()
 	if quotation.valid_till and getdate(quotation.valid_till) < getdate(quotation.transaction_date):
 		quotation.valid_till = None
+	# The saved schedule is due on the old date and is only rebuilt when empty; every
+	# cart write saves after this, not only update_cart.
+	quotation.payment_schedule = []
 
 	with system_permissions():
 		set_price_list_and_rate(quotation, cart_settings)
